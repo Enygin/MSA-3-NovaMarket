@@ -1,0 +1,34 @@
+@startuml Saga_PaymentFailed
+title Saga-хореография: ошибка оплаты → компенсация резервирования
+
+participant "Event Bus" as Bus
+participant "Payment Service" as Payment
+participant "Inventory Service" as Inventory
+participant "Order Service" as Order
+participant "Notification Service" as Notify
+
+== Предыдущие шаги: OrderCreated → InventoryReserved ==
+
+Bus -> Payment: InventoryReserved
+activate Payment
+Payment -> Payment: Попытка списания
+Payment -> Bus: **PaymentFailed** (недостаточно средств)
+deactivate Payment
+
+Bus -> Inventory: PaymentFailed
+activate Inventory
+Inventory -> Inventory: Освободить зарезервированные товары
+Inventory -> Bus: **InventoryReleased** (compensation)
+deactivate Inventory
+
+Bus -> Order: PaymentFailed
+activate Order
+Order -> Order: Статус → CANCELLED
+Order -> Bus: **OrderCancelled**
+deactivate Order
+
+Bus -> Notify: OrderCancelled
+activate Notify
+Notify -> Customer: Push: «Заказ отменён: ошибка оплаты»
+deactivate Notify
+@enduml

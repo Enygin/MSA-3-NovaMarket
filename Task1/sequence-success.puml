@@ -1,0 +1,64 @@
+@startuml Saga_Success
+title Saga-хореография: успешное оформление заказа
+
+actor "Покупатель" as Customer
+participant "Order Service" as Order
+participant "Event Bus" as Bus
+participant "Inventory Service" as Inventory
+participant "Payment Service" as Payment
+participant "Delivery Service" as Delivery
+participant "Notification Service" as Notify
+participant "Seller Service" as Seller
+
+Customer -> Order: Подтвердить заказ
+activate Order
+Order -> Order: Создать заказ (статус PENDING)
+Order -> Bus: **OrderCreated**
+deactivate Order
+
+Bus -> Inventory: OrderCreated
+activate Inventory
+Inventory -> Inventory: Проверить и зарезервировать товары
+alt Товары доступны
+    Inventory -> Bus: **InventoryReserved**
+    deactivate Inventory
+
+    Bus -> Payment: InventoryReserved
+    activate Payment
+    Payment -> Payment: Списать средства
+    alt Оплата успешна
+        Payment -> Bus: **PaymentSucceeded**
+        deactivate Payment
+
+        Bus -> Order: PaymentSucceeded
+        activate Order
+        Order -> Order: Статус → CONFIRMED
+        Order -> Bus: **OrderConfirmed**
+        deactivate Order
+
+        Bus -> Delivery: OrderConfirmed
+        activate Delivery
+        Delivery -> Delivery: Создать заявку в логистике
+        Delivery -> Bus: **DeliveryScheduled**
+        deactivate Delivery
+
+        Bus -> Notify: OrderConfirmed / DeliveryScheduled
+        activate Notify
+        Notify -> Customer: Push: «Заказ подтверждён, передан в доставку»
+        deactivate Notify
+
+        Bus -> Seller: OrderConfirmed
+        activate Seller
+        Seller -> Seller: Уведомить продавца о новом заказе
+        deactivate Seller
+    else Оплата отклонена
+        Payment -> Bus: **PaymentFailed**
+        deactivate Payment
+        note right: Переход к компенсации (см. диаграмму ошибок)
+    end
+else Товара нет в наличии
+    Inventory -> Bus: **InventoryReserveFailed**
+    deactivate Inventory
+    note right: Переход к компенсации (см. диаграмму ошибок)
+end
+@enduml

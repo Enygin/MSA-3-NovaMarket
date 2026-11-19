@@ -1,0 +1,28 @@
+@startuml Saga_InventoryFailed
+title Saga-хореография: ошибка резервирования → отмена заказа
+
+participant "Event Bus" as Bus
+participant "Inventory Service" as Inventory
+participant "Order Service" as Order
+participant "Notification Service" as Notify
+participant "Покупатель" as Customer
+
+== Начало: OrderCreated уже опубликован ==
+
+Bus -> Inventory: OrderCreated
+activate Inventory
+Inventory -> Inventory: Проверка остатков
+Inventory -> Bus: **InventoryReserveFailed** (товара нет)
+deactivate Inventory
+
+Bus -> Order: InventoryReserveFailed
+activate Order
+Order -> Order: Статус → CANCELLED
+Order -> Bus: **OrderCancelled**
+deactivate Order
+
+Bus -> Notify: OrderCancelled
+activate Notify
+Notify -> Customer: Push: «Заказ отменён: товара нет в наличии»
+deactivate Notify
+@enduml

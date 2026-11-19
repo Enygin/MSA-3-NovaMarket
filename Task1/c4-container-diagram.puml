@@ -1,0 +1,73 @@
+@startuml NovaMarket_C4_Container
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title NovaMarket — Контейнерная диаграмма (C2) с Event-Driven взаимодействием
+
+Person(customer, "Покупатель", "Пользователь мобильного приложения")
+Person(seller, "Продавец", "Поставщик товаров")
+
+System_Boundary(novamarket, "NovaMarket Platform") {
+
+    Container(mobile_app, "Mobile App", "iOS / Android", "Каталог, корзина, оформление заказа, статус доставки")
+    
+    Container(api_gateway, "API Gateway", "NGINX", "Маршрутизация, аутентификация, rate limiting")
+    
+    Container(catalog_service, "Catalog Service", "Go / Node.js", "Управление товарами, категориями, ценами, остатками (read model)")
+    Container(order_service, "Order Service", "Go / Java", "Оркестрация оформления заказа, Saga state")
+    Container(payment_service, "Payment Service", "Go / Java", "Интеграция с платёжным шлюзом, списание, возврат")
+    Container(inventory_service, "Inventory Service", "Go / Java", "Резервирование и освобождение товаров на складе")
+    Container(delivery_service, "Delivery Service", "Go / Java", "Интеграция с логистическим провайдером, трекинг")
+    Container(notification_service, "Notification Service", "Go / Node.js", "Push-уведомления покупателям и продавцам")
+    Container(seller_service, "Seller Service", "Go / Java", "Управление продавцами, их товарами и заказами")
+    
+    Container(event_bus, "Event Bus", "Kafka / RabbitMQ", "Асинхронная передача доменных событий")
+    
+    ContainerDb(catalog_db, "Catalog DB", "PostgreSQL", "Товары, категории, цены")
+    ContainerDb(order_db, "Order DB", "PostgreSQL", "Заказы, статусы, Saga state")
+    ContainerDb(inventory_db, "Inventory DB", "PostgreSQL", "Остатки, резервы")
+    ContainerDb(payment_db, "Payment DB", "PostgreSQL", "Транзакции, привязанные карты")
+    ContainerDb(notification_db, "Notification DB", "PostgreSQL", "История уведомлений")
+}
+
+System_Ext(payment_gateway, "Payment Gateway", "Внешний платёжный шлюз")
+System_Ext(logistics_provider, "Logistics Provider", "Внешняя служба доставки")
+
+' Клиенты
+Rel(customer, mobile_app, "Просматривает, заказывает", "HTTPS")
+Rel(seller, seller_service, "Управляет товарами, получает уведомления", "HTTPS / Push")
+
+' Gateway
+Rel(mobile_app, api_gateway, "Все запросы", "HTTPS")
+Rel(api_gateway, catalog_service, "GET /catalog", "REST")
+Rel(api_gateway, order_service, "POST /orders", "REST")
+Rel(api_gateway, seller_service, "Seller API", "REST")
+
+' Сервисы пишут в БД
+Rel(catalog_service, catalog_db, "Читает/пишет")
+Rel(order_service, order_db, "Читает/пишет")
+Rel(inventory_service, inventory_db, "Читает/пишет")
+Rel(payment_service, payment_db, "Читает/пишет")
+Rel(notification_service, notification_db, "Читает/пишет")
+
+' Внешние интеграции
+Rel(payment_service, payment_gateway, "Списание / возврат", "HTTPS")
+Rel(delivery_service, logistics_provider, "Создание заявки, трекинг", "HTTPS")
+
+' Событийное взаимодействие (через Event Bus)
+Rel(catalog_service, event_bus, "Публикует: ProductUpdated, StockUpdated")
+Rel(order_service, event_bus, "Публикует: OrderCreated, OrderConfirmed, OrderCancelled")
+Rel(inventory_service, event_bus, "Публикует: InventoryReserved, InventoryReserveFailed, InventoryReleased")
+Rel(payment_service, event_bus, "Публикует: PaymentSucceeded, PaymentFailed, RefundSucceeded")
+Rel(delivery_service, event_bus, "Публикует: DeliveryScheduled, DeliveryStatusUpdated")
+Rel(notification_service, event_bus, "Потребляет: OrderCreated, OrderConfirmed, PaymentSucceeded, DeliveryStatusUpdated")
+Rel(seller_service, event_bus, "Потребляет: OrderCreated, OrderConfirmed, PaymentSucceeded")
+
+' Подписки на события (для наглядности)
+Rel(event_bus, inventory_service, "OrderCreated")
+Rel(event_bus, payment_service, "InventoryReserved")
+Rel(event_bus, delivery_service, "OrderConfirmed")
+Rel(event_bus, notification_service, "Все релевантные события")
+Rel(event_bus, seller_service, "OrderCreated / OrderConfirmed / PaymentSucceeded")
+
+SHOW_LEGEND()
+@enduml

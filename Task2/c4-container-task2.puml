@@ -1,0 +1,53 @@
+@startuml NovaMarket_C4_Task2
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title NovaMarket — Контейнерная диаграмма (C2) с Order History (CQRS)
+
+Person(customer, "Покупатель", "Пользователь мобильного приложения")
+
+System_Boundary(novamarket, "NovaMarket Platform") {
+
+    Container(mobile_app, "Mobile App", "iOS / Android", "Каталог, заказы, история покупок")
+
+    Container(api_gateway, "API Gateway", "NGINX", "Маршрутизация, аутентификация")
+
+    Container(order_service, "Order Service", "Go / Java", "Оформление заказа, публикация доменных событий")
+    Container(catalog_service, "Catalog Service", "Go / Node.js", "Каталог товаров")
+    Container(inventory_service, "Inventory Service", "Go / Java", "Резервирование товаров")
+    Container(payment_service, "Payment Service", "Go / Java", "Оплата, возвраты")
+    Container(delivery_service, "Delivery Service", "Go / Java", "Доставка, трекинг")
+    Container(notification_service, "Notification Service", "Go / Node.js", "Уведомления")
+
+    Container(order_history_query, "Order History Query Service", "Go / Java", "Read-модель: отдаёт историю заказов покупателя по запросу")
+    Container(order_history_projection, "Order History Projection", "Go / Java", "Consumer событий, обновляет денормализованную read-БД")
+
+    Container(event_bus, "Event Bus", "Kafka", "Доменные события")
+
+    ContainerDb(order_db, "Order DB", "PostgreSQL", "Заказы (write-side)")
+    ContainerDb(order_history_db, "Order History DB", "PostgreSQL / Read-optimized", "Денормализованная история заказов (read-side)")
+    ContainerDb(payment_db, "Payment DB", "PostgreSQL", "Транзакции")
+    ContainerDb(delivery_db, "Delivery DB", "PostgreSQL", "Доставки")
+}
+
+System_Ext(payment_gateway, "Payment Gateway", "Внешний шлюз")
+System_Ext(logistics_provider, "Logistics Provider", "Внешняя доставка")
+
+Rel(customer, mobile_app, "Просматривает историю", "HTTPS")
+Rel(mobile_app, api_gateway, "GET /orders/history", "HTTPS")
+Rel(api_gateway, order_history_query, "Маршрутизация запроса истории", "REST")
+
+Rel(order_history_query, order_history_db, "Читает read-модель")
+
+Rel(order_service, order_db, "Читает/пишет")
+Rel(order_service, event_bus, "Публикует: OrderCreated, OrderConfirmed, OrderCancelled")
+Rel(payment_service, event_bus, "Публикует: PaymentSucceeded, PaymentFailed, RefundSucceeded")
+Rel(delivery_service, event_bus, "Публикует: DeliveryScheduled, DeliveryStatusUpdated")
+
+Rel(event_bus, order_history_projection, "Подписка на события заказов")
+Rel(order_history_projection, order_history_db, "Обновляет денормализованную историю")
+
+Rel(payment_service, payment_gateway, "Списание/возврат")
+Rel(delivery_service, logistics_provider, "Заявки/трекинг")
+
+SHOW_LEGEND()
+@enduml

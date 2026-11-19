@@ -1,0 +1,42 @@
+@startuml Saga_DeliveryFailed
+title Saga-хореография: ошибка доставки → возврат средств и освобождение резерва
+
+participant "Event Bus" as Bus
+participant "Delivery Service" as Delivery
+participant "Order Service" as Order
+participant "Payment Service" as Payment
+participant "Inventory Service" as Inventory
+participant "Notification Service" as Notify
+participant "Покупатель" as Customer
+
+== Предыдущие шаги: PaymentSucceeded → OrderConfirmed ==
+
+Bus -> Delivery: OrderConfirmed
+activate Delivery
+Delivery -> Delivery: Попытка создать заявку в логистике
+Delivery -> Bus: **DeliveryScheduleFailed**
+deactivate Delivery
+
+Bus -> Order: DeliveryScheduleFailed
+activate Order
+Order -> Order: Статус → CANCELLED
+Order -> Bus: **OrderCancelled**
+deactivate Order
+
+Bus -> Payment: OrderCancelled
+activate Payment
+Payment -> Payment: Вернуть средства
+Payment -> Bus: **RefundSucceeded** (compensation)
+deactivate Payment
+
+Bus -> Inventory: OrderCancelled
+activate Inventory
+Inventory -> Inventory: Освободить резерв
+Inventory -> Bus: **InventoryReleased** (compensation)
+deactivate Inventory
+
+Bus -> Notify: OrderCancelled
+activate Notify
+Notify -> Customer: Push: «Заказ отменён: проблема с доставкой, средства возвращены»
+deactivate Notify
+@enduml
